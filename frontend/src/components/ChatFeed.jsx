@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, Sparkles, Terminal } from 'lucide-react';
+import { Bot, User, Sparkles, Terminal, Volume2 } from 'lucide-react';
 import FeedbackCard from './FeedbackCard';
 
 export default function ChatFeed({ messages, isTyping, sessionInfo }) {
@@ -65,9 +65,29 @@ export default function ChatFeed({ messages, isTyping, sessionInfo }) {
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                 <div className="message-bubble">
                   {msg.content}
-                  <span className="message-meta-time">
-                    {isAi ? 'Interviewer' : 'Candidate'}
-                  </span>
+                  <div className="message-meta-time" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                    <span>{isAi ? 'Interviewer' : 'Candidate'}</span>
+                    {isAi && (
+                      <button 
+                        onClick={() => {
+                          window.speechSynthesis.cancel();
+                          window.speechSynthesis.speak(new SpeechSynthesisUtterance(msg.content));
+                        }}
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          color: 'inherit', 
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '2px'
+                        }}
+                        title="Listen to question"
+                      >
+                        <Volume2 size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Render feedback card directly below the user's answer */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, Sparkles, AlertTriangle, Cpu } from 'lucide-react';
+import { Plus, Trash2, Sparkles, AlertTriangle, Cpu, X } from 'lucide-react';
 
 export default function Sidebar({
   sessions,
@@ -8,7 +8,9 @@ export default function Sidebar({
   onDeleteSession,
   onOpenNewSessionModal,
   apiMode,
-  dbConnected
+  dbConnected,
+  isOpen,
+  onClose
 }) {
   const formatDate = (dateStr) => {
     try {
@@ -25,21 +27,30 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <Sparkles size={22} fill="url(#purple-blue-grad)" style={{ stroke: 'url(#purple-blue-grad)' }} />
-          <span>INTERVIEW COACH</span>
-          {/* SVG gradient definition for the icon */}
-          <svg width="0" height="0" style={{ position: 'absolute' }}>
-            <defs>
-              <linearGradient id="purple-blue-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#8b5cf6" />
-                <stop offset="100%" stopColor="#3b82f6" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
+    <>
+      {isOpen && <div className="sidebar-overlay" onClick={onClose}></div>}
+      <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="sidebar-logo">
+              <Sparkles size={22} fill="url(#purple-blue-grad)" style={{ stroke: 'url(#purple-blue-grad)' }} />
+              <span>INTERVIEW COACH</span>
+              {/* SVG gradient definition for the icon */}
+              <svg width="0" height="0" style={{ position: 'absolute' }}>
+                <defs>
+                  <linearGradient id="purple-blue-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#8b5cf6" />
+                    <stop offset="100%" stopColor="#3b82f6" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            
+            {/* Mobile close button */}
+            <button className="mobile-close-btn" onClick={onClose} style={{ display: 'none' }}>
+              <X size={20} />
+            </button>
+          </div>
         
         <button className="new-chat-btn" onClick={onOpenNewSessionModal}>
           <Plus size={16} />
@@ -120,6 +131,7 @@ export default function Sidebar({
           )}
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

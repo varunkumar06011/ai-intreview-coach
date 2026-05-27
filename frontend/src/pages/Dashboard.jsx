@@ -20,10 +20,30 @@ export default function Dashboard() {
   const [apiMode, setApiMode] = useState('mock');
   const [dbConnected, setDbConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [penaltyPoints, setPenaltyPoints] = useState(0);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef(null);
   const textareaRef = useRef(null);
+  const initialValueRef = useRef('');
+  const inputValueRef = useRef('');
+  const isTypingRef = useRef(false);
+  const activeSessionIdRef = useRef(null);
+  const silenceTimeoutRef = useRef(null);
+
+  // Keep refs in sync with state for auto-submit
+  useEffect(() => {
+    inputValueRef.current = inputValue;
+  }, [inputValue]);
+  
+  useEffect(() => {
+    isTypingRef.current = isTyping;
+  }, [isTyping]);
+  
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   // Check login
   useEffect(() => {
@@ -32,6 +52,21 @@ export default function Dashboard() {
       navigate('/login');
     }
   }, [navigate]);
+
+  // Tab switching cheat detection
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && activeSessionId) {
+        setPenaltyPoints(prev => prev + 1);
+        alert("🚨 STRICT WARNING 🚨\n\nYou have switched tabs or minimized the screen during an active interview session. This is a violation of the proctoring rules.\n\nA penalty has been applied to your final score.");
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeSessionId]);
 
   // Speech Recognition Setup
   useEffect(() => {
@@ -42,15 +77,25 @@ export default function Dashboard() {
       recognitionRef.current.interimResults = true;
       
       recognitionRef.current.onresult = (event) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+        let transcript = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInputValue((initialValueRef.current + ' ' + transcript).trim());
+        
+        // Reset 5-second silence timeout
+        if (silenceTimeoutRef.current) {
+          clearTimeout(silenceTimeoutRef.current);
+        }
+        silenceTimeoutRef.current = setTimeout(() => {
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
           }
-        }
-        if (finalTranscript) {
-           setInputValue(prev => (prev + ' ' + finalTranscript).trim());
-        }
+          setIsRecording(false);
+          if (inputValueRef.current.trim() && !isTypingRef.current && activeSessionIdRef.current) {
+            submitAnswerCore(inputValueRef.current.trim());
+          }
+        }, 3000);
       };
       
       recognitionRef.current.onerror = (event) => {
@@ -60,6 +105,9 @@ export default function Dashboard() {
       
       recognitionRef.current.onend = () => {
         setIsRecording(false);
+        if (silenceTimeoutRef.current) {
+          clearTimeout(silenceTimeoutRef.current);
+        }
       };
     }
   }, []);
@@ -69,8 +117,15 @@ export default function Dashboard() {
     if (isRecording) {
       recognitionRef.current?.stop();
       setIsRecording(false);
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      
+      // Auto-submit answer when mic is turned off
+      if (inputValueRef.current.trim() && !isTypingRef.current && activeSessionIdRef.current) {
+        submitAnswerCore(inputValueRef.current.trim());
+      }
     } else {
       if (recognitionRef.current) {
+        initialValueRef.current = inputValueRef.current;
         recognitionRef.current.start();
         setIsRecording(true);
       } else {
@@ -166,6 +221,13 @@ export default function Dashboard() {
         if (historyResponse.ok) {
           const historyData = await historyResponse.json();
           setMessages(historyData.history);
+          
+          // Read the AI question aloud
+          const lastMsg = historyData.history[historyData.history.length - 1];
+          if (lastMsg && lastMsg.role === 'ai') {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(lastMsg.content));
+          }
         }
       } else {
         setErrorMsg("Failed to generate initial interview question.");
@@ -211,18 +273,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleSubmitAnswer = async (e) => {
-    e.preventDefault();
-    
-    // Stop recording if active
-    if (isRecording) {
-        recognitionRef.current?.stop();
-        setIsRecording(false);
-    }
-
-    if (!inputValue.trim() || isTyping || !activeSessionId) return;
-
-    const answerText = inputValue.trim();
+  const submitAnswerCore = async (answerText) => {
     setInputValue('');
 
     // Pre-insert user's answer in state for optimistic rendering
@@ -254,6 +305,13 @@ export default function Dashboard() {
         if (historyResponse.ok) {
           const historyData = await historyResponse.json();
           setMessages(historyData.history);
+          
+          // Read the AI question aloud
+          const lastMsg = historyData.history[historyData.history.length - 1];
+          if (lastMsg && lastMsg.role === 'ai') {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(lastMsg.content));
+          }
         }
       } else {
         const errorData = await response.json();
@@ -268,6 +326,19 @@ export default function Dashboard() {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleSubmitAnswer = async (e) => {
+    e.preventDefault();
+    
+    // Stop recording if active
+    if (isRecording) {
+        recognitionRef.current?.stop();
+        setIsRecording(false);
+    }
+
+    if (!inputValueRef.current.trim() || isTyping || !activeSessionId) return;
+    submitAnswerCore(inputValueRef.current.trim());
   };
 
   const handleDeleteSession = async (sessionId) => {
@@ -308,12 +379,14 @@ export default function Dashboard() {
     }
   };
 
-  // Get current average score
+  // Get current average score minus penalty
   const getAverageScore = () => {
     const scoredFeedback = messages.filter(m => m.role === 'user' && m.feedback);
     if (scoredFeedback.length === 0) return null;
     const sum = scoredFeedback.reduce((acc, curr) => acc + curr.feedback.score, 0);
-    return (sum / scoredFeedback.length).toFixed(1);
+    let avg = sum / scoredFeedback.length;
+    avg = Math.max(0, avg - penaltyPoints);
+    return avg.toFixed(1);
   };
 
   const averageScore = getAverageScore();
@@ -324,11 +397,19 @@ export default function Dashboard() {
       <Sidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
-        onSelectSession={selectSession}
+        onSelectSession={(id) => {
+          selectSession(id);
+          setIsMobileSidebarOpen(false); // Close sidebar on mobile after selection
+        }}
         onDeleteSession={handleDeleteSession}
-        onOpenNewSessionModal={() => setShowStartModal(true)}
+        onOpenNewSessionModal={() => {
+          setShowStartModal(true);
+          setIsMobileSidebarOpen(false);
+        }}
         apiMode={apiMode}
         dbConnected={dbConnected}
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Chat Panel */}
@@ -374,13 +455,22 @@ export default function Dashboard() {
           <>
             {/* Header */}
             <header className="chat-header">
-              <div className="chat-header-info">
-                <h1 className="chat-header-title">
-                  {activeSession.role} @ {activeSession.company} Mock Interview
-                </h1>
-                <p className="chat-header-subtitle">
-                  {activeSession.interview_type} • {activeSession.level} Level
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button 
+                  className="mobile-menu-btn" 
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  style={{ display: 'none' }}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <div className="chat-header-info">
+                  <h1 className="chat-header-title">
+                    {activeSession.role} @ {activeSession.company} Mock Interview
+                  </h1>
+                  <p className="chat-header-subtitle">
+                    {activeSession.interview_type} • {activeSession.level} Level
+                  </p>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -466,6 +556,13 @@ export default function Dashboard() {
           </>
         ) : (
           <div className="empty-state">
+            <button 
+              className="mobile-menu-btn empty-state-menu" 
+              onClick={() => setIsMobileSidebarOpen(true)}
+              style={{ display: 'none', position: 'absolute', top: '16px', left: '16px' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
             <div className="empty-icon-glow">
               <MessageSquare size={40} />
             </div>
@@ -487,6 +584,7 @@ export default function Dashboard() {
         onClose={() => setShowStartModal(false)}
         onSubmit={handleStartSession}
         canCancel={sessions.length > 0}
+        errorMsg={errorMsg}
       />
     </div>
   );

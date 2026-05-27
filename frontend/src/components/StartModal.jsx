@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Play, Briefcase, Building, ShieldAlert, Layers } from 'lucide-react';
 
-export default function StartModal({ isOpen, onClose, onSubmit, canCancel }) {
+export default function StartModal({ isOpen, onClose, onSubmit, canCancel, errorMsg }) {
   const [role, setRole] = useState('Software Engineer');
   const [company, setCompany] = useState('Google');
   const [level, setLevel] = useState('Senior');
@@ -35,6 +35,23 @@ export default function StartModal({ isOpen, onClose, onSubmit, canCancel }) {
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
+            {errorMsg && (
+              <div style={{
+                background: 'rgba(244, 63, 94, 0.15)',
+                border: '1px solid rgba(244, 63, 94, 0.3)',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                color: '#fca5a5',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '16px'
+              }}>
+                <ShieldAlert size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Briefcase size={14} className="title-improvement" />
