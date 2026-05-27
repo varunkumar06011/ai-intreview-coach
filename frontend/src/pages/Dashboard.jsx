@@ -162,7 +162,6 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Backend health check failed:", err);
       setDbConnected(false);
-      setErrorMsg("Backend server is offline. Please make sure FastAPI is running on port 8000.");
     }
   }
 
